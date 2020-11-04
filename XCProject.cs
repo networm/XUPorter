@@ -56,6 +56,7 @@ namespace UnityEditor.XCodeEditor
 		
 		public XCProject( string filePath ) : this()
 		{
+
 			if( !System.IO.Directory.Exists( filePath ) ) {
 				Debug.LogWarning( "XCode project path does not exist: " + filePath );
 				return;
@@ -253,6 +254,19 @@ namespace UnityEditor.XCodeEditor
 			}
 			modified = true;
 			return modified;	
+		}
+
+		public bool AddOtherLinkerFlagsWithForceLoad(string absoluteFilePath){
+			if (!File.Exists(absoluteFilePath)) {
+				return false;
+			}
+
+			AddOtherLinkerFlags ("-force_load");
+			System.Uri fileURI = new System.Uri( absoluteFilePath );
+			System.Uri rootURI = new System.Uri( ( projectRootPath + "/." ) );
+			string relativeFilePath = rootURI.MakeRelativeUri( fileURI ).ToString();
+
+			return AddOtherLinkerFlags (relativeFilePath);
 		}
 
 		public bool AddOtherLinkerFlags( string flag )
@@ -730,7 +744,38 @@ namespace UnityEditor.XCodeEditor
 			Debug.Log( "Adding files..." );
 			foreach( string filePath in mod.files ) {
 				string absoluteFilePath = System.IO.Path.Combine( mod.path, filePath );
-				this.AddFile( absoluteFilePath, modGroup );
+
+				string targetFilePath = Path.Combine(Path.Combine(projectRootPath, "Libraries"), filePath);
+				string targetDirectory = Path.GetDirectoryName(targetFilePath);
+
+				if (File.Exists(absoluteFilePath))
+				{
+					if (!string.IsNullOrEmpty(targetDirectory) && !Directory.Exists(targetDirectory))
+					{
+						Directory.CreateDirectory(targetDirectory);
+					}
+
+					File.Copy(absoluteFilePath, targetFilePath, true);
+
+					Debug.Log(string.Format("Copy file: {0}", targetFilePath));
+				}
+
+				if (Directory.Exists(absoluteFilePath))
+				{
+					//Now Create all of the directories
+					foreach (string dirPath in Directory.GetDirectories(absoluteFilePath, "*",
+						SearchOption.AllDirectories))
+						Directory.CreateDirectory(dirPath.Replace(absoluteFilePath, targetFilePath));
+
+					//Copy all the files & Replaces any files with the same name
+					foreach (string newPath in Directory.GetFiles(absoluteFilePath, "*.*",
+						SearchOption.AllDirectories))
+						File.Copy(newPath, newPath.Replace(absoluteFilePath, targetFilePath), true);
+
+					Debug.Log(string.Format("Copy directory: {0}", targetFilePath));
+				}
+
+				this.AddFile( targetFilePath, modGroup );
 			}
 
 			Debug.Log( "Adding embed binaries..." );
